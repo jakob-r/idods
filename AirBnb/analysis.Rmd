@@ -1,0 +1,227 @@
+---
+title: "Machine Learning in R using mlr on the AirBnb Dataset"
+author: "Jakob Richter"
+date: "November 29, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.width = 10, fig.width = 8)
+```
+
+```{r download data, include=FALSE}
+if (!file.exists("data/listings.csv")) {
+  url = 'http://data.insideairbnb.com/germany/be/berlin/2017-05-08/data/listings.csv.gz'
+  download.file(url = url, destfile = "listings.csv.gz")  
+  if (.Platform$OS.type == "unix") {
+    system("gzip -d data/listings.csv.gz")
+  } else {
+    stop("Please extract the file yourself.")
+  }
+}
+```
+
+## The libraries we will use
+
+```{r libraries}
+library(data.table) # faster then data.frames
+library(stringi) # fast string operations
+library(ggplot2)
+library(leaflet) # interactive maps
+library(plyr) # revalue etc.
+library(dplyr) # tidy data
+library(magrittr) # pipe %>% etc.
+library(mlr) # machine learning
+library(gender) # gender for names
+```
+
+## Read the data
+
+```{r read data}
+data.listings = fread("data/listings.csv")
+```
+
+Convert strings like `"500$"` and `"30%"` to numbers.
+
+```{r dollars}
+col.with.dollars = c("price", "weekly_price", "monthly_price", "security_deposit", "cleaning_fee", "extra_people")
+data.listings %<>% mutate_at(col.with.dollars, funs(as.numeric(stri_replace_first_fixed(., '$', ''))))
+data.listings %<>% mutate_at("host_response_rate", funs(as.numeric(stri_replace_first_fixed(., '%', ''))))
+data.listings = as.data.table(data.listings)
+```
+
+## Prepare for Machine Learning
+
+Define which variables can be used to predict the *price* and which not.
+
+```{r define vars}
+learnable = c("latitude", "longitude", "property_type", "room_type", "accommodates", "bathrooms", "bedrooms", "beds", "host_is_superhost", "neighbourhood_cleansed", "cancellation_policy", "reviews_per_month", "calculated_host_listings_count", "require_guest_phone_verification", "require_guest_profile_picture", "instant_bookable", "number_of_reviews", "review_scores_value", "review_scores_location", "review_scores_communication", "review_scores_checkin", "review_scores_cleanliness", "review_scores_accuracy", "review_scores_rating", "availability_365", "minimum_nights", "maximum_nights", "square_feet", "bed_type", "host_response_rate", "host_response_time", "host_location", "guests_included")
+```
+
+Have we missed anything?
+```{r check vars}
+# typos?
+setdiff(learnable, colnames(data.listings))
+
+not.learnable = setdiff(colnames(data.listings), learnable)
+str(data.listings[, not.learnable, with = FALSE])
+```
+
+### Feature Generation
+
+Add column for gender of host
+
+```{r gender}
+names.gender = gender(unique(data.listings$host_name))
+names.gender = dplyr::rename(names.gender, host_name = name) #do not confuse with plyr::rename!!
+data.listings = merge(data.listings, names.gender[,c("host_name", "proportion_female")])
+learnable = c(learnable, "proportion_female")
+```
+
+### Inspect Data
+
+How does the data look we want to learn on?
+
+```{r view learnable}
+str(data.listings[, learnable, with = FALSE])
+
+data = data.listings[reviews_per_month > 0.1 & !is.na(price), c(learnable, "price"), with = FALSE]
+```
+
+Prepare variables
+
+```{r prepare vars}
+# only differeciate between berlin and not berlin host.
+data[, host_is_berlin := stri_detect_fixed(host_location, pattern = "Berlin")]
+data$host_location = NULL
+
+# convert host response time to ranking
+data$host_response_time %<>% revalue(c("within an hour" = 1, "within a day" = 3, "N/A" = 5, "a few days or more" = 4, "within a few hours" = 2)) %>% as.integer()
+
+# convert cancellation_policy to ranking
+data$cancellation_policy %<>% revalue(c("strict" = 3, "flexible" = 1, "moderate" = 2, "super_strict_60" = 4)) %>% as.integer()
+
+
+# convert columns with t/f as character to logical
+tf.cols = names(which(sapply(data, function(x) all(c("t","f") %in% unique(x)))))
+data %<>% mutate_at(tf.cols, funs('=='(.,"t")))
+
+# convert strings to factors
+char.cols = names(which(sapply(data, function(x) is.character(x) || is.logical(x))))
+data %<>% mutate_at(char.cols, funs(as.factor))
+```
+
+## Machine Learning
+
+Fit a **random forest** model on the data with the `price` as label.
+
+```{r ml train}
+tsk = makeRegrTask(data = data, target = "price")
+tsk = removeConstantFeatures(tsk)
+
+# impute of missing values
+lrn = makeLearner("regr.ranger", num.trees = 200, importance = "permutation")
+lrn = makeImputeWrapper(lrn, classes = list(integer = imputeMax(10), numeric = imputeMax(10), factor = imputeConstant("__miss__")))
+tsk
+system.time({
+  mod = train(lrn, task = tsk)
+})
+```
+
+Let's predict the prices using the trees that have not seen those observations.
+This is important because otherwise we would have overfitted predictions.
+We call that **out of bag predictions**.
+
+```{r ml oob}
+p = getOOBPreds(mod, tsk)
+```
+
+Let's see how well do we predict the prices and if we have outliers.
+```{r ml vispred}
+plot(p$data$truth, p$data$response, pch = 19, col = rgb(0,0,0,0.1))
+abline(0,1, col = "red")
+```
+
+### Variable Importance
+
+Which variables are the main predictors for the price?
+```{r ml importance}
+featimp = getFeatureImportance(mod)
+plot.data = melt(featimp$res)
+plot.data$variable %<>% reorder(plot.data$value)
+g = ggplot(plot.data, aes(x = variable, y = value, fill = value))
+g + geom_col() + coord_flip()
+```
+
+### Partial Dependency Plots
+
+How do certain variables influence the price?
+```{r ml partial}
+pd = generatePartialDependenceData(mod, tsk, c("number_of_reviews", "accommodates", "host_response_time", "cancellation_policy"), individual = FALSE)
+g = plotPartialDependence(pd)
+g
+
+pd = generatePartialDependenceData(mod, tsk, c("number_of_reviews", "accommodates", "host_response_time", "cancellation_policy"), individual = TRUE)
+g = plotPartialDependence(pd, p = 0.02)
+g
+```
+
+### Find those cheap flats
+
+```{r ml cheap}
+important.vars = c("latitude", "longitude", "property_type", "bathrooms", "bedrooms", "beds", "reviews_per_month", "number_of_reviews", "review_scores_value", "review_scores_location", "review_scores_communication", "review_scores_checkin", "review_scores_cleanliness", "review_scores_accuracy", "review_scores_rating", "square_feet", "bed_type", "host_response_rate", "host_response_time", "guests_included")
+data = as.data.table(data)
+data.sml = data[!is.na(price) & accommodates %in% 2:4 & room_type == "Entire home/apt" & beds %in% 1:2 & longitude > 13.28 & longitude < 13.52 & latitude > 52.45 & latitude < 52.57 , c(important.vars, "price"), with = FALSE]
+
+tsk.sml = makeRegrTask(data = data.sml, target = "price")
+
+mod.sml = train(lrn, task = tsk.sml)
+p = getOOBPreds(mod.sml, tsk.sml)
+plot(p$data$truth, p$data$response, pch = 19, col = rgb(0,0,0,0.1))
+abline(0,1, col = "red")
+```
+
+We want to see where these values on the top left side are on the map:
+```{r map}
+data.sml$saving = p$data$response - p$data$truth
+
+library(ggmap)
+bbox = make_bbox(lon = data.sml$longitude, lat = data.sml$latitude)
+map = get_map(location = bbox, source = "google")
+g = ggmap(map, darken = c(0.3, "white"))
+g = g + geom_point(data = data.sml[saving > 0], aes(x = longitude, y = latitude, color = saving, alpha = saving))
+g = g + scale_alpha(range = c(0.01,1))
+g = g + scale_color_continuous(low = "#333333", high = "#FF0000")
+g
+```
+
+Using Leaflet to generate interactive map:
+```{r leaflet}
+getColor = function(x) {
+  ifelse(x > 25, "green", ifelse(x < -25, "red", "orange"))
+}
+
+icons = awesomeIcons(
+  iconColor = 'black',
+  library = 'ion',
+  markerColor = getColor(data.sml$saving)
+)
+
+m = leaflet(data = data.sml) %>% addTiles() %>% addAwesomeMarkers(~longitude, ~latitude, icon = icons, label = ~sprintf("Saving: %.2f, Price: %.2f", saving, price), clusterOptions = markerClusterOptions())
+m
+```
+
+### Possible Improvements
+
+* Put more weight to flats that are more often rented.
+* Put more weight on recent bookings
+* Compare price against actual bookings. Which flats get booked more often?
+* Filter dubious ads.
+
+## Resources
+
+* mlr project page: https://github.com/mlr-org/mlr
+* mlr tutorial: https://mlr-org.github.io/mlr-tutorial/devel/html/
+* Vignette for `data.table`: https://cran.r-project.org/web/packages/data.table/vignettes/datatable-intro.html
+* `leaflet` tutorial: https://rstudio.github.io/leaflet/
+* This document was created using Rmarkdown and [`knitr`](https://yihui.name/knitr/)
