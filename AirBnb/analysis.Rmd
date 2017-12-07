@@ -31,6 +31,9 @@ library(leaflet) # interactive maps
 library(plyr) # revalue etc.
 library(dplyr) # tidy data
 library(magrittr) # pipe %>% etc.
+# We need the latest version of mlr so you might want to run
+# library(devtools)
+# install_github("mlr-org/mlr")
 library(mlr) # machine learning
 library(gender) # gender for names
 ```
@@ -64,7 +67,7 @@ Have we missed anything?
 setdiff(learnable, colnames(data.listings))
 
 not.learnable = setdiff(colnames(data.listings), learnable)
-str(data.listings[, not.learnable, with = FALSE])
+glimpse(data.listings[, not.learnable, with = FALSE])
 ```
 
 ### Feature Generation
@@ -83,7 +86,7 @@ learnable = c(learnable, "proportion_female")
 How does the data look we want to learn on?
 
 ```{r view learnable}
-str(data.listings[, learnable, with = FALSE])
+glimpse(data.listings[, learnable, with = FALSE])
 
 data = data.listings[reviews_per_month > 0.1 & !is.na(price), c(learnable, "price"), with = FALSE]
 ```
