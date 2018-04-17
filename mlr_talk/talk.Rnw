@@ -311,12 +311,19 @@ nm = sapply(list(classif = listMeasures("classif"), regr = listMeasures("regr"),
   \oneliner{We can explore them on the webpage -- or ask \pkg{mlr}}
 
   \framebreak
-  
+
+<<include = FALSE>>=
+w = getOption("width")
+options(width = 140)
+@
 <<listlrns1, warning=FALSE, size='tiny'>>=
 # list all classification learners which can predict probabilities
 # and allow multiclass classification
 listLearners("classif",
-  properties = c("prob", "multiclass"))[1:5, 1:6]
+  properties = c("prob", "multiclass"))[1:10, 1:6]
+@
+<<include = FALSE>>=
+options(width = w)
 @
 
 % \framebreak
@@ -347,25 +354,6 @@ task = makeClassifTask(data = iris, target = "Species")
 print(task)
 @
 \end{vframe}
-
-\begin{vbframe}{Task Abstraction: API}
-<<task2>>=
-getTaskId(task)
-str(getTaskData(task))
-@
-\framebreak
-<<task3>>=
-str(getTaskDesc(task))
-@
-\framebreak
-<<task4>>=
-getTaskSize(task)
-getTaskFeatureNames(task)
-getTaskTargetNames(task)
-getTaskFormula(task)
-summary(getTaskTargets(task))
-@
-\end{vbframe}
 
 \begin{vframe}{Learner Abstraction}
   \begin{itemize}
@@ -484,15 +472,8 @@ Container object: Measures (aggregated and for each test set), predictions, mode
 \end{itemize}
 <<measure>>=
 print(mmce)
-listMeasures("classif")[1:12]
-@
-\end{vframe}
-
-\begin{vframe}{What measures are available?}
-\oneliner{We can explore them on the webpage -- or ask \pkg{mlr}}
-<<measure2>>=
-listMeasures("classif")
-listMeasures(task)
+head(listMeasures("classif"))
+head(listMeasures(task))
 @
 \end{vframe}
 
@@ -638,7 +619,7 @@ plot(res$mbo.result$final.opt.state)
     \item No knowledge of parameters needed.
     \item Decides automatically for suitable tuning method.
   \end{itemize}
-<<echo = TRUE, warnings = FALSE>>=
+<<echo = TRUE, warnings = FALSE, message=FALSE>>=
 library(mlrHyperopt)
 res = hyperopt(task = pid.task, learner = "classif.ksvm")
 res
