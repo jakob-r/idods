@@ -596,7 +596,7 @@ res
 \end{frame}
 
 \begin{vframe}{Tuning Example: MBO}
-<<echo = TRUE>>=
+<<echo = TRUE, fig.height=2>>=
 library(mlrMBO)
 ps = makeParamSet(
   makeNumericParam("C", lower = -10, upper = 10, trafo = function(x) 2^x),
@@ -605,10 +605,9 @@ ps = makeParamSet(
 mbo.ctrl = setMBOControlInfill(makeMBOControl(), crit = crit.aei)
 ctrl = makeTuneControlMBO(budget = 20L, mbo.control = mbo.ctrl)
 rdesc = makeResampleDesc("CV", iters = 2L)
-res = tuneParams("classif.ksvm", task = pid.task, control = ctrl,
-  resampling = rdesc, par.set = ps, show.info = FALSE)
-res
-plot(res$mbo.result$final.opt.state)
+(res = tuneParams("classif.ksvm", task = pid.task, control = ctrl,
+  resampling = rdesc, par.set = ps, show.info = FALSE))
+plot(res$mbo.result$final.opt.state, scale.panels = TRUE)
 @
 \end{vframe}
 
