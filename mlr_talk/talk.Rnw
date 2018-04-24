@@ -17,6 +17,12 @@
 \usepackage{pifont}
 \usepackage{dsfont}
 
+%less space for output code
+\usepackage{etoolbox}
+\makeatletter
+\preto{\@verbatim}{\topsep=-12pt \partopsep=0pt }
+\makeatother
+
 \usetheme{boxes}
 \usefonttheme{structuresmallcapsserif}
 \newenvironment{whiteframe}
@@ -103,7 +109,6 @@
 
 
 \AtBeginSection{\frame{\sectionpage}}
-
 
 \begin{document}
 % \usebackgroundtemplate{
@@ -243,7 +248,10 @@ predictions = predict(model, newdata = test.data, ...)
     % \item Many packages require the user to \enquote{guess} good hyperparameters
     \item Result: lengthy, tedious and error-prone code
   \end{blocki}
-  \oneliner{Our goal: A domain-specific language for many machine learning concepts!}
+  
+  \begin{block}{Our goal}
+  A domain-specific language for many machine learning concepts!
+  \end{block}
 \end{vframe}
 
 \begin{vframe}{Motivation: \pkg{mlr}}
@@ -312,18 +320,15 @@ nm = sapply(list(classif = listMeasures("classif"), regr = listMeasures("regr"),
   \oneliner{We can explore them on the webpage -- or ask \pkg{mlr}}
 
   \framebreak
-
-<<include = FALSE>>=
+List all classification learners which can predict probabilities and allow multiclass classification:
+<<include = FALSE, cache=FALSE>>=
 w = getOption("width")
-options(width = 140)
+options(width = 200)
 @
-<<listlrns1, warning=FALSE, size='tiny'>>=
-# list all classification learners which can predict probabilities
-# and allow multiclass classification
-listLearners("classif",
-  properties = c("prob", "multiclass"))[1:10, 1:6]
+<<listlrns1, warning=FALSE, size='tiny', cache = FALSE>>=
+listLearners("classif", properties = c("prob", "multiclass"))[, c("class", "name", "factors", "missings")]
 @
-<<include = FALSE>>=
+<<include = FALSE, cache = FALSE>>=
 options(width = w)
 @
 
@@ -393,7 +398,7 @@ options(width = w)
 @
 \end{vframe}
 
-\begin{vbframe}{Basic Usage: Train/Predict/Evaluate}
+\begin{vframe}{Basic Usage: Train/Predict/Evaluate}
 
 <<tpe>>=
 #Split data in train and test data
@@ -416,13 +421,11 @@ pred = predict(mod, newdata = iris.test)
 performance(pred, mmce)
 @
 
-\end{vbframe}
+\end{vframe}
 
 
 \begin{vbframe}{Resampling Abstraction}
-\includegraphics[width = \textwidth]{fig/Nested_Resampling.png}
-\framebreak
-
+\includegraphics[width = 0.9\textwidth]{fig/Nested_Resampling.png}
   \begin{itemize}
     \item Procedure: Train, Predict, Eval, Repeat.
     \item Aim: Estimate expected model performance.
@@ -560,8 +563,8 @@ res = tuneParams("classif.ksvm", task = spam.task, control = ctrl,
   resampling = rdesc, par.set = ps, show.info = FALSE)
 res
 pe = mlr::generateHyperParsEffectData(res)
-plotHyperParsEffect(pe, x = "C", y = "sigma", z = "mmce.test.mean",
-  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE)
+plotHyperParsEffect(pe, "C", "sigma", z = "mmce.test.mean", plot.type = "heatmap", 
+  interpolate = makeLearner("regr.kknn", k = 1), show.experiments = TRUE)
 @
 \end{vbframe}
 
@@ -577,8 +580,8 @@ res = tuneParams("classif.ksvm", task = spam.task, control = ctrl,
   resampling = rdesc, par.set = ps, show.info = FALSE)
 res
 pe = mlr::generateHyperParsEffectData(res)
-plotHyperParsEffect(pe, x = "C", y = "sigma", z = "mmce.test.mean", 
-  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE)
+plotHyperParsEffect(pe, "C", "sigma", z = "mmce.test.mean", plot.type = "heatmap", 
+  interpolate = makeLearner("regr.kknn", k = 1), show.experiments = TRUE)
 @
 \end{vbframe}
 
@@ -686,11 +689,11 @@ res
 <<wrapperExampleC, fig.width=4.5 * 0.8, out.width='0.55\\linewidth', fig.show='hold'>>=
 pe = generateHyperParsEffectData(res)
 brewer.div = colorRampPalette(brewer.pal(11, "RdYlBu"), interpolate = "spline")
-plotHyperParsEffect(pe, x = "fw.perc", y = "dw.perc", z = "mmce.test.mean",
-  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE) +
+plotHyperParsEffect(pe, "fw.perc", "dw.perc", z = "mmce.test.mean", plot.type = "heatmap",
+  interpolate = makeLearner("regr.kknn", k = 1), show.experiments = TRUE) +
   scale_fill_gradientn(colours = brewer.div(200))
-plotHyperParsEffect(pe, x = "fw.perc", y = "dw.perc", z = "exec.time",
-  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE) +
+plotHyperParsEffect(pe, "fw.perc", "dw.perc", z = "exec.time", plot.type = "heatmap", 
+  interpolate = makeLearner("regr.kknn", k = 1), show.experiments = TRUE) +
   scale_fill_gradientn(colours = brewer.div(200))
 @
 \end{vbframe}
