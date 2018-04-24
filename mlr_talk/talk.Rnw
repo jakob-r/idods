@@ -17,13 +17,6 @@
 \usepackage{pifont}
 \usepackage{dsfont}
 
-\definecolor{tugreen}{cmyk}{0.57, 0, 1.00, 0}
-\definecolor{tugreen1}{cmyk}{0.57, 0, 1.00, 0}
-\definecolor{tugreen2}{HTML}{667E4D}
-\definecolor{tugreen3}{HTML}{72A544}
-\definecolor{tugreen4}{HTML}{3A472E}
-
-\usecolortheme{dove}
 \usetheme{boxes}
 \usefonttheme{structuresmallcapsserif}
 \newenvironment{whiteframe}
@@ -35,9 +28,18 @@
  \end{frame}
 }
 
+%theme adjustements
+\usetheme[block = fill, progressbar = frametitle, ]{metropolis}
+\definecolor{TuGreen}{RGB}{132,184,24}
+\definecolor{TuGreen40}{RGB}{211,227,175}
+\setbeamercolor{title separator}{fg = TuGreen}
+\setbeamercolor{progress bar}{fg = TuGreen, bg = TuGreen40}
+\setbeamertemplate{frame footer}{Jakob Richter (TU Dortmund)}
+\setbeamersize{text margin left=1cm,text margin right=1cm}
+\setbeamerfont{title}{size=\large}%
+%\usefonttheme[onlymath]{serif}
+
 \usetikzlibrary{shapes,matrix,positioning,chains,arrows,shadows,decorations.pathmorphing,fit,backgrounds}
-\setbeamercolor{itemize item}{fg=tugreen1}
-\setbeamercolor{itemize subitem}{fg=tugreen1}
 \setbeamertemplate{itemize item}[square]
 \setbeamertemplate{footline}[frame number]
 \beamertemplatenavigationsymbolsempty
@@ -54,7 +56,6 @@
 \newcommand{\abs}[1]{\ensuremath{\left| #1 \right|}}
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\pkg}[1]{\texttt{#1}}
-\newcommand{\tarrow}{\textcolor{tugreen1}{{\ding{212}}}\xspace}
 
 % suppress frame numbering, so noframenumbering works
 % \setbeamertemplate{frametitle continuation}
@@ -419,9 +420,7 @@ performance(pred, mmce)
 
 
 \begin{vbframe}{Resampling Abstraction}
-
 \includegraphics[width = \textwidth]{fig/Nested_Resampling.png}
-
 \framebreak
 
   \begin{itemize}
@@ -489,7 +488,7 @@ set.seed(12345)
 
 <<eval=TRUE>>=
 # these are predefined in mlr for toying around:
-tasks = list(iris.task, sonar.task)
+tasks = list(iris.task, spam.task)
 learners = list(
   makeLearner("classif.rpart"),
   makeLearner("classif.randomForest", ntree = 500),
@@ -549,67 +548,68 @@ plotBMRBoxplots(br)
   \end{center}
 \end{frame}
 
-
-\begin{vframe}{Tuning Example: Random Search}
-<<echo = FALSE, include = FALSE>>=
-library(rgenoud)
-@
+\begin{vbframe}{Tuning Example: Grid Search}
 <<echo = TRUE, message=FALSE>>=
-set.seed(1)
 ps = makeParamSet(
-  makeNumericParam("C", lower = -10, upper = 10, trafo = function(x) 2^x),
-  makeNumericParam("sigma", lower = -10, upper = 10, trafo = function(x) 2^x)
+  makeNumericParam("C", lower = -15, upper = 15, trafo = function(x) 2^x),
+  makeNumericParam("sigma", lower = -15, upper = 15, trafo = function(x) 2^x)
+)
+ctrl = makeTuneControlGrid(resolution = 5)
+rdesc = makeResampleDesc("CV", iters = 2L)
+res = tuneParams("classif.ksvm", task = spam.task, control = ctrl,
+  resampling = rdesc, par.set = ps, show.info = FALSE)
+res
+pe = mlr::generateHyperParsEffectData(res)
+plotHyperParsEffect(pe, x = "C", y = "sigma", z = "mmce.test.mean",
+  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE)
+@
+\end{vbframe}
+
+\begin{vbframe}{Tuning Example: Random Search}
+<<echo = TRUE, message=FALSE>>=
+ps = makeParamSet(
+  makeNumericParam("C", lower = -15, upper = 15, trafo = function(x) 2^x),
+  makeNumericParam("sigma", lower = -15, upper = 15, trafo = function(x) 2^x)
 )
 ctrl = makeTuneControlRandom(maxit = 20L)
 rdesc = makeResampleDesc("CV", iters = 2L)
-res = tuneParams("classif.ksvm", task = pid.task, control = ctrl,
+res = tuneParams("classif.ksvm", task = spam.task, control = ctrl,
   resampling = rdesc, par.set = ps, show.info = FALSE)
 res
+pe = mlr::generateHyperParsEffectData(res)
+plotHyperParsEffect(pe, x = "C", y = "sigma", z = "mmce.test.mean", 
+  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE)
 @
-\end{vframe}
+\end{vbframe}
 
-\begin{frame}{mlrMBO: Model-Based Optimization Toolbox}
-\begin{minipage}{0.4\linewidth}
-    \begin{itemize}
-      \item Any regression from mlr
-      \item Arbtritrary infill
-      \item Single - or multi-crit
-      \item Multi-point proposal
-      \item Via parallelMap and batchtools
-        runs on many parallel backends and clusters
-      \item Algorithm configuration
-      \item Active research
-    \end{itemize}
+\begin{vbframe}{Baysisan Optimization of Hyperparameters with \pkg{mlrMBO}}
 
-\end{minipage}
-\begin{minipage}{0.55\linewidth}
-    \includegraphics[width = \textwidth]{fig/mlrMBO1.pdf}
-\end{minipage}
-\begin{center}
-    \begin{itemize}
-      \item mlrMBO:
-        \url{https://github.com/mlr-org/mlrMBO}
-      \item mlrMBO Paper on arXiv (under review)
-        \url{https://arxiv.org/abs/1703.03373}
-    \end{itemize}
-\end{center}
-\end{frame}
+\begin{itemize}
+  \item State-of-the-art tuning for expensive Problems
+  \item Multi-criterial (e.g. FPR vs. TNR)
+  \item Parallelization by Multi-point proposals
+  \item Tutorial and Examples: \url{https://mlr-org.github.io/mlrMBO/}
+\end{itemize}
 
-\begin{vframe}{Tuning Example: MBO}
-<<echo = TRUE, fig.height=2>>=
+<<echo = FALSE, include = FALSE>>=
+library(rgenoud)
+set.seed(1)
+@
+
+<<echo = TRUE, fig.height=4.5, warning = FALSE, message = FALSE>>=
 library(mlrMBO)
 ps = makeParamSet(
-  makeNumericParam("C", lower = -10, upper = 10, trafo = function(x) 2^x),
-  makeNumericParam("sigma", lower = -10, upper = 10, trafo = function(x) 2^x)
+  makeNumericParam("C", lower = -15, upper = 15, trafo = function(x) 2^x),
+  makeNumericParam("sigma", lower = -15, upper = 15, trafo = function(x) 2^x)
 )
 mbo.ctrl = setMBOControlInfill(makeMBOControl(), crit = crit.aei)
 ctrl = makeTuneControlMBO(budget = 20L, mbo.control = mbo.ctrl)
 rdesc = makeResampleDesc("CV", iters = 2L)
-(res = tuneParams("classif.ksvm", task = pid.task, control = ctrl,
+(res = tuneParams("classif.ksvm", task = spam.task, control = ctrl,
   resampling = rdesc, par.set = ps, show.info = FALSE))
 plot(res$mbo.result$final.opt.state, scale.panels = TRUE)
 @
-\end{vframe}
+\end{vbframe}
 
 \begin{vframe}{Tuning Example: mlrHyperopt}
   \begin{itemize}
@@ -618,32 +618,32 @@ plot(res$mbo.result$final.opt.state, scale.panels = TRUE)
     \item No knowledge of parameters needed.
     \item Decides automatically for suitable tuning method.
   \end{itemize}
-<<echo = TRUE, warnings = FALSE, message=FALSE>>=
+<<mlrHyperopt_example, message = FALSE, warning=FALSE>>=
 library(mlrHyperopt)
-res = hyperopt(task = pid.task, learner = "classif.ksvm")
+res = hyperopt(task = spam.task, learner = "classif.ksvm")
 res
 @
 \end{vframe}
 
-\begin{vbframe}{Model Multiplexer}
+\begin{vframe}{Model Multiplexer}
 The model multiplexer allows for tuning over multiple learners!
-<<warning=FALSE, fig.width=8>>=
+<<warning=FALSE, fig.width=8, >>=
 bls = list(
   makeLearner("classif.ksvm"),
   makeLearner("classif.randomForest")
 )
 lrn = makeModelMultiplexer(bls)
 ps = makeModelMultiplexerParamSet(lrn,
-  makeNumericParam("sigma", lower = -10, upper = 10, trafo = function(x) 2^x),
-  makeNumericParam("C", lower = -10, upper = 10, trafo = function(x) 2^x),
+  makeNumericParam("sigma", lower = -15, upper = 15, trafo = function(x) 2^x),
+  makeNumericParam("C", lower = -15, upper = 15, trafo = function(x) 2^x),
   makeIntegerParam("mtry", lower = 1L, upper = 8L)
 )
 rdesc = makeResampleDesc("CV", iters = 2L)
 ctrl = makeTuneControlIrace(maxExperiments = 120L)
-res = tuneParams(lrn, pid.task, rdesc, par.set = ps, control = ctrl)
+res = tuneParams(lrn, spam.task, rdesc, par.set = ps, control = ctrl)
 res
 @
-\end{vbframe}
+\end{vframe}
 
 \begin{vbframe}{\pkg{mlr} Learner Wrappers}
   \begin{blocki}{What?}
@@ -663,6 +663,36 @@ res
     \item \structure{Stacking} to combine models in heterogenous ensembles
     \item \structure{Over- and Undersampling} for unbalanced classification
   \end{blocki}
+  \framebreak
+<<wrapperExample>>=
+set.seed(1)
+library(ggplot2); library(RColorBrewer)
+lrn = makeLearner("classif.randomForest", ntree = 200)
+lrn = makeRemoveConstantFeaturesWrapper(learner = lrn)
+lrn = makeDownsampleWrapper(learner = lrn)
+lrn = makeFilterWrapper(lrn, fw.method = "gain.ratio")
+filterParams(getParamSet(lrn), tunable = TRUE, type = c("numeric", "integer"))
+@
+
+<<wrapperExambleB>>=
+ps = makeParamSet(
+  makeNumericParam("fw.perc", lower = 0.1, upper = 1),
+  makeNumericParam("dw.perc", lower = 0.1, upper = 1))
+res = tuneParams(lrn, spam.task, resampling = cv10, par.set = ps, 
+  control = makeTuneControlGrid(resolution = 7), show.info = FALSE)
+res
+@
+
+<<wrapperExampleC, fig.width=4.5 * 0.8, out.width='0.55\\linewidth', fig.show='hold'>>=
+pe = generateHyperParsEffectData(res)
+brewer.div = colorRampPalette(brewer.pal(11, "RdYlBu"), interpolate = "spline")
+plotHyperParsEffect(pe, x = "fw.perc", y = "dw.perc", z = "mmce.test.mean",
+  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE) +
+  scale_fill_gradientn(colours = brewer.div(200))
+plotHyperParsEffect(pe, x = "fw.perc", y = "dw.perc", z = "exec.time",
+  plot.type = "heatmap", interpolate = "regr.fnn", show.experiments = TRUE) +
+  scale_fill_gradientn(colours = brewer.div(200))
+@
 \end{vbframe}
 
 \begin{frame}{Moving on with mlr}
